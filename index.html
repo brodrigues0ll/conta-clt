@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#6366f1" />
+  <meta name="description" content="Controle de Horas CLT — Gerencie suas horas de trabalho com facilidade." />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Horas CLT" />
+  <meta name="mobile-web-app-capable" content="yes" />
+
+  <title>Controle de Horas CLT</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+
+  <!-- Tailwind CSS via CDN -->
+  <script>
+    // Configuração do Tailwind ANTES de carregar o script
+    window.tailwind = window.tailwind || {};
+    window._tailwindConfig = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50:  '#eef2ff',
+              100: '#e0e7ff',
+              200: '#c7d2fe',
+              300: '#a5b4fc',
+              400: '#818cf8',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              800: '#3730a3',
+              900: '#312e81',
+            }
+          }
+        }
+      }
+    };
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    if (window.tailwind) tailwind.config = window._tailwindConfig;
+  </script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <!-- SheetJS (xlsx) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <!-- Estilos personalizados -->
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+
+<body class="h-full bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+
+  <!-- ══════════════════════════════
+       LOADING OVERLAY
+       ══════════════════════════════ -->
+  <div
+    id="loading-overlay"
+    class="fixed inset-0 z-50 items-center justify-center bg-black/40 backdrop-blur-sm hidden"
+    role="status"
+    aria-live="polite"
+  >
+    <div class="bg-white dark:bg-gray-800 rounded-2xl px-8 py-6 flex flex-col items-center gap-4 shadow-2xl">
+      <div class="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full spinner"></div>
+      <p id="loading-text" class="text-sm font-medium text-gray-600 dark:text-gray-400">Carregando...</p>
+    </div>
+  </div>
+  <!-- Exibir loading via JS: overlay.classList.remove/add('hidden') + flex -->
+
+  <!-- ══════════════════════════════
+       TOAST CONTAINER
+       ══════════════════════════════ -->
+  <div
+    id="toast-container"
+    class="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"
+    aria-live="polite"
+    aria-atomic="false"
+    style="max-width:min(320px, calc(100vw - 32px))"
+  ></div>
+
+  <!-- ══════════════════════════════
+       MODAL
+       ══════════════════════════════ -->
+  <div id="modal-container" class="fixed inset-0 z-40 hidden" role="dialog" aria-modal="true">
+    <div
+      id="modal-backdrop"
+      class="absolute inset-0 bg-black/50 backdrop-blur-sm"
+    ></div>
+    <div class="relative z-10 flex items-end sm:items-center justify-center min-h-full p-0 sm:p-4">
+      <div
+        id="modal-content"
+        class="bg-white dark:bg-gray-800 w-full sm:rounded-2xl shadow-2xl
+               max-w-lg max-h-[92vh] flex flex-col overflow-hidden
+               rounded-t-2xl"
+      >
+        <!-- Modal header -->
+        <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 shrink-0">
+          <h2 id="modal-title" class="text-base font-semibold text-gray-900 dark:text-white truncate pr-4"></h2>
+          <button
+            id="modal-close"
+            class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors shrink-0"
+            aria-label="Fechar"
+          >
+            <svg class="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+        <!-- Modal body -->
+        <div id="modal-body" class="px-5 py-4 overflow-y-auto flex-1"></div>
+        <!-- Modal footer -->
+        <div id="modal-footer" class="px-5 pb-5 pt-4 border-t border-gray-100 dark:border-gray-700 shrink-0 hidden"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════
+       APP SHELL
+       ══════════════════════════════ -->
+  <div id="app" class="flex flex-col h-full max-w-2xl mx-auto relative">
+
+    <!-- HEADER -->
+    <header
+      class="sticky top-0 z-30 bg-white/90 dark:bg-gray-900/90 backdrop-blur-md
+             border-b border-gray-200 dark:border-gray-700 shrink-0"
+    >
+      <div class="flex items-center justify-between px-4 py-3">
+
+        <!-- Logo + título -->
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="w-9 h-9 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-xl flex items-center justify-center shrink-0 shadow-md shadow-indigo-200 dark:shadow-indigo-900/40">
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+          </div>
+          <div class="min-w-0">
+            <h1 class="text-sm font-bold text-gray-900 dark:text-white leading-none truncate">
+              Controle de Horas
+            </h1>
+            <p id="header-subtitle" class="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">CLT</p>
+          </div>
+        </div>
+
+        <!-- Ações do header -->
+        <div class="flex items-center gap-1 shrink-0">
+          <button
+            id="btn-dark-mode"
+            class="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors"
+            aria-label="Alternar modo escuro"
+            title="Alternar tema"
+          >
+            <!-- Ícone Sol (visível no dark mode) -->
+            <svg id="icon-sun" class="w-5 h-5 text-amber-500 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+            </svg>
+            <!-- Ícone Lua (visível no light mode) -->
+            <svg id="icon-moon" class="w-5 h-5 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- CONTEÚDO PRINCIPAL -->
+    <main
+      id="main-content"
+      class="flex-1 overflow-y-auto"
+      style="padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px))"
+    >
+      <!-- Conteúdo injetado via JavaScript -->
+      <div class="flex items-center justify-center h-full">
+        <div class="text-center">
+          <div class="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full spinner mx-auto mb-4"></div>
+          <p class="text-sm text-gray-400">Iniciando aplicativo...</p>
+        </div>
+      </div>
+    </main>
+
+    <!-- NAVEGAÇÃO INFERIOR -->
+    <nav
+      class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-2xl z-30
+             bg-white/95 dark:bg-gray-900/95 backdrop-blur-md
+             border-t border-gray-200 dark:border-gray-700"
+      style="padding-bottom: env(safe-area-inset-bottom, 0px)"
+      role="navigation"
+      aria-label="Navegação principal"
+    >
+      <div class="flex items-center justify-around px-1 py-1">
+
+        <button
+          class="nav-btn flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl transition-colors text-gray-500 dark:text-gray-400"
+          data-page="dashboard"
+          aria-label="Início"
+        >
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+          </svg>
+          <span class="text-xs font-medium">Início</span>
+        </button>
+
+        <button
+          class="nav-btn flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl transition-colors text-gray-500 dark:text-gray-400"
+          data-page="registrar"
+          aria-label="Registrar dia"
+        >
+          <div class="relative">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 4v16m8-8H4"/>
+            </svg>
+          </div>
+          <span class="text-xs font-medium">Registrar</span>
+        </button>
+
+        <button
+          class="nav-btn flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl transition-colors text-gray-500 dark:text-gray-400"
+          data-page="historico"
+          aria-label="Histórico"
+        >
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
+          </svg>
+          <span class="text-xs font-medium">Histórico</span>
+        </button>
+
+        <button
+          class="nav-btn flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl transition-colors text-gray-500 dark:text-gray-400"
+          data-page="calendario"
+          aria-label="Calendário"
+        >
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+          </svg>
+          <span class="text-xs font-medium">Calendário</span>
+        </button>
+
+        <button
+          class="nav-btn flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl transition-colors text-gray-500 dark:text-gray-400"
+          data-page="configuracoes"
+          aria-label="Configurações"
+        >
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+          <span class="text-xs font-medium">Config.</span>
+        </button>
+
+      </div>
+    </nav>
+
+  </div><!-- /#app -->
+
+  <!-- ══════════════════════════════
+       SCRIPTS
+       ══════════════════════════════ -->
+  <script src="js/utils.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/calculations.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/app.js"></script>
+
+</body>
+</html>
