@@ -171,19 +171,26 @@ function calcularResumo(registro, config) {
   const batidas          = registro.batidas || [];
   const dataStr          = registro.data    || '';
   const horasTrabalhadas = calcularHorasTrabalhadas(batidas);
-  const jornadaMin       = (config.jornadaDiaria || 8) * 60;
+  const jornadaBase      = (config.jornadaDiaria || 8) * 60;
   const tolerancia       = config.toleranciaHoraExtra || 0;
 
   const valorHora      = calcularValorHora(config.salario || 0, config.horasMensais || 220);
   const pctExtra       = config.percentualHoraExtra ?? 50;
   const valorHoraExtra = calcularValorHoraExtra(valorHora, pctExtra);
 
-  // Feriado / Domingo
+  // Tipo do dia
   const feriadoNome = getFeriado(dataStr, config.feriadosPersonalizados);
   const ehDomingo   = dataStr ? isDomingo(dataStr) : false;
+  const ehSabado    = dataStr ? isSabado(dataStr)  : false;
   const ehFeriado   = !!feriadoNome;
 
-  // Horas extras e normais
+  // Jornada efetiva: sábado/domingo configurados como dia extra → jornadaMin = 0
+  // (todas as horas entram no banco de horas como extras positivas)
+  let jornadaMin = jornadaBase;
+  if (ehSabado  && config.sabadoHoraExtra  !== false) jornadaMin = 0;
+  if (ehDomingo && config.domingoHoraExtra !== false) jornadaMin = 0;
+
+  // Horas extras e normais (com jornada efetiva)
   const horasExtrasMin  = horasTrabalhadas - jornadaMin;
   const horasNormaisMin = Math.min(horasTrabalhadas, jornadaMin);
 
@@ -204,15 +211,24 @@ function calcularResumo(registro, config) {
     }
   }
 
-  // Hora noturna reduzida: 52min30s = 1h noturna → crédito extra de 7.5min por hora noturna
+  // Hora noturna reduzida: 52min30s = 1h noturna → crédito extra de ~7.5min/hora noturna
   let minutosNoturnoReduzido = 0;
   if (config.horaNoturnaReduzida !== false && minutosNoturnos > 0) {
-    minutosNoturnoReduzido = Math.floor(minutosNoturnos / 7); // ≈ 7.5/52.5 por minuto
+    minutosNoturnoReduzido = Math.floor(minutosNoturnos / 7);
   }
 
   const bancoHoras = horasExtrasMin + minutosNoturnoReduzido;
 
+  // ─── Sábado (Art. 59 / acordo coletivo) ───
+  // Adicional de pagamento sobre as horas trabalhadas no sábado
+  let valorSabado = 0;
+  if (ehSabado && config.adicionalSabado !== false) {
+    const pct = config.percentualAdicionalSabado ?? 50;
+    valorSabado = (horasTrabalhadas / 60) * valorHora * (pct / 100);
+  }
+
   // ─── Domingo / Feriado (Art. 67) ───
+  // Adicional de pagamento sobre as horas trabalhadas
   let valorDomingo = 0;
   if (ehDomingo && config.adicionalDomingo !== false) {
     const pct = config.percentualAdicionalDomingo ?? 100;
@@ -225,10 +241,10 @@ function calcularResumo(registro, config) {
   // ─── Valores ───
   const valorHorasNormais = (horasNormaisMin / 60) * valorHora;
   const valorExtras       = (extrasParaPagamento / 60) * valorHoraExtra;
-  const totalDia          = valorHorasNormais + valorExtras + valorNoturno + valorDomingo;
+  const totalDia          = valorHorasNormais + valorExtras + valorNoturno + valorSabado + valorDomingo;
 
   // ─── Alertas CLT ───
-  const alertaIntrajornada  = config.verificarIntrajornada !== false
+  const alertaIntrajornada = config.verificarIntrajornada !== false
     ? analisarIntrajornada(batidas, horasTrabalhadas)
     : null;
   const alertaHoraExtraCLT = horasExtrasMin > 120; // >2h extras — Art. 59
@@ -245,10 +261,12 @@ function calcularResumo(registro, config) {
     valorHorasNormais,
     valorExtras,
     valorNoturno,
+    valorSabado,
     valorDomingo,
     totalDia,
 
     isDomingo:   ehDomingo,
+    isSabado:    ehSabado,
     isFeriado:   ehFeriado,
     nomeFeriado: feriadoNome,
     minutosNoturnos,

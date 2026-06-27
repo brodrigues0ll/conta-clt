@@ -691,11 +691,12 @@ function _atualizarPreview() {
 
   // Alertas CLT
   const alertas = [];
-  if (resumo.isFeriado)          alertas.push(`🎉 ${resumo.nomeFeriado}`);
-  else if (resumo.isDomingo)     alertas.push('☀️ Domingo (+adicional)');
+  if (resumo.isFeriado)           alertas.push(`🎉 ${resumo.nomeFeriado}`);
+  else if (resumo.isDomingo)      alertas.push('☀️ Domingo (+adicional)');
+  else if (resumo.isSabado)       alertas.push('📅 Sábado (+adicional)');
   if (resumo.minutosNoturnos > 0) alertas.push(`🌙 Noturno: ${formatarDuracao(resumo.minutosNoturnos)}`);
   if (resumo.alertaHoraExtraCLT) alertas.push('🚨 Excedeu 2h extras (Art. 59)');
-  if (resumo.alertaIntrajornada) alertas.push(`⚠ Pausa insuficiente (faltam ${resumo.alertaIntrajornada.faltam}min)`);
+  if (resumo.alertaIntrajornada)  alertas.push(`⚠ Pausa insuficiente (faltam ${resumo.alertaIntrajornada.faltam}min)`);
 
   const alertasEl = document.getElementById('prev-alertas-clt');
   if (alertasEl) {
@@ -1003,6 +1004,8 @@ function _renderHistoricoCard(registro) {
     badgesCLT.push(`<span class="chip bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400">🎉 ${escapeHTML(resumo.nomeFeriado)}</span>`);
   else if (resumo.isDomingo)
     badgesCLT.push(`<span class="chip bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400">☀️ Domingo</span>`);
+  else if (resumo.isSabado)
+    badgesCLT.push(`<span class="chip bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400">📅 Sábado</span>`);
   if (resumo.minutosNoturnos > 0)
     badgesCLT.push(`<span class="chip bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-400">🌙 ${formatarDuracao(resumo.minutosNoturnos)}</span>`);
   if (resumo.alertaHoraExtraCLT)
@@ -1060,8 +1063,8 @@ function _renderHistoricoCard(registro) {
             <p class="text-sm font-semibold ${bancoCls}">${formatarDuracao(resumo.horasExtras, true)}</p>
           </div>
           <div class="text-center py-1.5 px-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-            <p class="text-xs text-gray-400 dark:text-gray-500">Total</p>
-            <p class="text-sm font-semibold text-emerald-600 dark:text-emerald-400">${formatarMoeda(resumo.totalDia)}</p>
+            <p class="text-xs text-gray-400 dark:text-gray-500">${(App.config || {}).exibirTotalDia !== false ? 'Total' : 'Extras'}</p>
+            <p class="text-sm font-semibold text-emerald-600 dark:text-emerald-400">${formatarMoeda((App.config || {}).exibirTotalDia !== false ? resumo.totalDia : resumo.valorExtras)}</p>
           </div>
         </div>
 
@@ -1364,11 +1367,12 @@ function _renderDetalhesDia(registro, config) {
   const bancoCls = resumo.bancoHoras >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400';
 
   const badgesCLT = [];
-  if (resumo.isFeriado)           badgesCLT.push(`<span class="chip bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400">🎉 ${escapeHTML(resumo.nomeFeriado)}</span>`);
-  else if (resumo.isDomingo)      badgesCLT.push(`<span class="chip bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400">☀️ Domingo</span>`);
-  if (resumo.minutosNoturnos > 0) badgesCLT.push(`<span class="chip bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-400">🌙 Noturno: ${formatarDuracao(resumo.minutosNoturnos)}</span>`);
-  if (resumo.alertaHoraExtraCLT)  badgesCLT.push(`<span class="chip bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400">🚨 &gt;2h extras (Art. 59)</span>`);
-  if (resumo.alertaIntrajornada)   badgesCLT.push(`<span class="chip bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400">⚠ Pausa insuf. (faltam ${resumo.alertaIntrajornada.faltam}min)</span>`);
+  if (resumo.isFeriado)            badgesCLT.push(`<span class="chip bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400">🎉 ${escapeHTML(resumo.nomeFeriado)}</span>`);
+  else if (resumo.isDomingo)       badgesCLT.push(`<span class="chip bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400">☀️ Domingo</span>`);
+  else if (resumo.isSabado)        badgesCLT.push(`<span class="chip bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400">📅 Sábado</span>`);
+  if (resumo.minutosNoturnos > 0)  badgesCLT.push(`<span class="chip bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-400">🌙 Noturno: ${formatarDuracao(resumo.minutosNoturnos)}</span>`);
+  if (resumo.alertaHoraExtraCLT)   badgesCLT.push(`<span class="chip bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400">🚨 &gt;2h extras (Art. 59)</span>`);
+  if (resumo.alertaIntrajornada)    badgesCLT.push(`<span class="chip bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400">⚠ Pausa insuf. (faltam ${resumo.alertaIntrajornada.faltam}min)</span>`);
 
   return `
     <div class="space-y-4">
@@ -1511,6 +1515,27 @@ async function renderConfiguracoes() {
         <div id="preview-valor-hora" class="text-xs text-gray-400 dark:text-gray-500 text-center"></div>
       </div>
 
+      <!-- Exibição -->
+      <div class="bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-gray-700 space-y-4">
+        <h3 class="text-sm font-semibold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-700 pb-2">
+          🖥️ Exibição
+        </h3>
+        <div class="flex items-center justify-between gap-3">
+          <div class="min-w-0">
+            <p class="text-sm font-medium text-gray-900 dark:text-white">Valor mostrado no histórico</p>
+            <p class="text-xs text-gray-400 dark:text-gray-500">
+              <strong>Total do dia</strong> inclui normais + extras + noturno + adicional. <strong>Só extras</strong> mostra apenas o valor das horas extras.
+            </p>
+          </div>
+          <div class="shrink-0">
+            <select id="cfg-exibir-total-dia" class="input-base text-sm py-1.5">
+              <option value="total" ${config.exibirTotalDia !== false ? 'selected' : ''}>Total do dia</option>
+              <option value="extras" ${config.exibirTotalDia === false ? 'selected' : ''}>Só extras</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
       <!-- Regras CLT -->
       <div class="bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-gray-700 space-y-4">
         <h3 class="text-sm font-semibold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-700 pb-2">
@@ -1529,39 +1554,90 @@ async function renderConfiguracoes() {
           </p>
         </div>
 
-        <!-- Adicional dominical -->
-        <div class="flex items-center justify-between gap-3">
-          <div class="min-w-0">
-            <p class="text-sm font-medium text-gray-900 dark:text-white">Adicional dominical (Art. 67)</p>
-            <p class="text-xs text-gray-400 dark:text-gray-500">Percentual extra em domingos trabalhados</p>
-          </div>
-          <div class="flex items-center gap-2 shrink-0">
-            <input type="number" id="cfg-pct-domingo" value="${config.percentualAdicionalDomingo ?? 100}"
-              min="0" max="500" class="input-base w-16 text-center text-sm py-1.5" ${config.adicionalDomingo !== false ? '' : 'disabled'}/>
-            <span class="text-xs text-gray-400">%</span>
-            <label class="relative inline-flex items-center cursor-pointer ml-1">
-              <input type="checkbox" id="cfg-adicional-domingo" class="sr-only peer" ${config.adicionalDomingo !== false ? 'checked' : ''}
-                onchange="document.getElementById('cfg-pct-domingo').disabled=!this.checked"/>
+        <!-- Sábado como hora extra -->
+        <div class="rounded-xl border border-gray-100 dark:border-gray-700 p-3 space-y-3 bg-gray-50/50 dark:bg-gray-700/20">
+          <p class="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Sábado (regime 40h/sem)</p>
+
+          <div class="flex items-center justify-between gap-3">
+            <div class="min-w-0">
+              <p class="text-sm font-medium text-gray-900 dark:text-white">Todas as horas entram no banco</p>
+              <p class="text-xs text-gray-400 dark:text-gray-500">Sábado = dia de folga → horas extras positivas</p>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer shrink-0">
+              <input type="checkbox" id="cfg-sabado-hora-extra" class="sr-only peer" ${config.sabadoHoraExtra !== false ? 'checked' : ''}/>
               <div class="w-9 h-5 bg-gray-200 dark:bg-gray-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
             </label>
+          </div>
+
+          <div class="flex items-center justify-between gap-3">
+            <div class="min-w-0">
+              <p class="text-sm font-medium text-gray-900 dark:text-white">Adicional de pagamento</p>
+              <p class="text-xs text-gray-400 dark:text-gray-500">Percentual extra sobre as horas trabalhadas</p>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <input type="number" id="cfg-pct-sabado" value="${config.percentualAdicionalSabado ?? 50}"
+                min="0" max="500" class="input-base w-16 text-center text-sm py-1.5" ${config.adicionalSabado !== false ? '' : 'disabled'}/>
+              <span class="text-xs text-gray-400">%</span>
+              <label class="relative inline-flex items-center cursor-pointer ml-1">
+                <input type="checkbox" id="cfg-adicional-sabado" class="sr-only peer" ${config.adicionalSabado !== false ? 'checked' : ''}
+                  onchange="document.getElementById('cfg-pct-sabado').disabled=!this.checked"/>
+                <div class="w-9 h-5 bg-gray-200 dark:bg-gray-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+              </label>
+            </div>
           </div>
         </div>
 
-        <!-- Adicional feriado -->
-        <div class="flex items-center justify-between gap-3">
-          <div class="min-w-0">
-            <p class="text-sm font-medium text-gray-900 dark:text-white">Adicional em feriados (Art. 67)</p>
-            <p class="text-xs text-gray-400 dark:text-gray-500">Nacional + Carnaval + Corpus Christi + Páscoa</p>
-          </div>
-          <div class="flex items-center gap-2 shrink-0">
-            <input type="number" id="cfg-pct-feriado" value="${config.percentualAdicionalFeriado ?? 100}"
-              min="0" max="500" class="input-base w-16 text-center text-sm py-1.5" ${config.adicionalFeriado !== false ? '' : 'disabled'}/>
-            <span class="text-xs text-gray-400">%</span>
-            <label class="relative inline-flex items-center cursor-pointer ml-1">
-              <input type="checkbox" id="cfg-adicional-feriado" class="sr-only peer" ${config.adicionalFeriado !== false ? 'checked' : ''}
-                onchange="document.getElementById('cfg-pct-feriado').disabled=!this.checked"/>
+        <!-- Domingo como hora extra -->
+        <div class="rounded-xl border border-gray-100 dark:border-gray-700 p-3 space-y-3 bg-gray-50/50 dark:bg-gray-700/20">
+          <p class="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Domingo (Art. 67 CLT)</p>
+
+          <div class="flex items-center justify-between gap-3">
+            <div class="min-w-0">
+              <p class="text-sm font-medium text-gray-900 dark:text-white">Todas as horas entram no banco</p>
+              <p class="text-xs text-gray-400 dark:text-gray-500">Domingo = DSR → horas extras positivas</p>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer shrink-0">
+              <input type="checkbox" id="cfg-domingo-hora-extra" class="sr-only peer" ${config.domingoHoraExtra !== false ? 'checked' : ''}/>
               <div class="w-9 h-5 bg-gray-200 dark:bg-gray-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
             </label>
+          </div>
+
+          <div class="flex items-center justify-between gap-3">
+            <div class="min-w-0">
+              <p class="text-sm font-medium text-gray-900 dark:text-white">Adicional dominical (Art. 67)</p>
+              <p class="text-xs text-gray-400 dark:text-gray-500">Percentual extra sobre as horas trabalhadas</p>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <input type="number" id="cfg-pct-domingo" value="${config.percentualAdicionalDomingo ?? 100}"
+                min="0" max="500" class="input-base w-16 text-center text-sm py-1.5" ${config.adicionalDomingo !== false ? '' : 'disabled'}/>
+              <span class="text-xs text-gray-400">%</span>
+              <label class="relative inline-flex items-center cursor-pointer ml-1">
+                <input type="checkbox" id="cfg-adicional-domingo" class="sr-only peer" ${config.adicionalDomingo !== false ? 'checked' : ''}
+                  onchange="document.getElementById('cfg-pct-domingo').disabled=!this.checked"/>
+                <div class="w-9 h-5 bg-gray-200 dark:bg-gray-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Feriados -->
+        <div class="rounded-xl border border-gray-100 dark:border-gray-700 p-3 space-y-3 bg-gray-50/50 dark:bg-gray-700/20">
+          <p class="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Feriados (Art. 67 CLT)</p>
+          <div class="flex items-center justify-between gap-3">
+            <div class="min-w-0">
+              <p class="text-sm font-medium text-gray-900 dark:text-white">Adicional em feriados</p>
+              <p class="text-xs text-gray-400 dark:text-gray-500">Nacional + Carnaval + Corpus Christi + Páscoa</p>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <input type="number" id="cfg-pct-feriado" value="${config.percentualAdicionalFeriado ?? 100}"
+                min="0" max="500" class="input-base w-16 text-center text-sm py-1.5" ${config.adicionalFeriado !== false ? '' : 'disabled'}/>
+              <span class="text-xs text-gray-400">%</span>
+              <label class="relative inline-flex items-center cursor-pointer ml-1">
+                <input type="checkbox" id="cfg-adicional-feriado" class="sr-only peer" ${config.adicionalFeriado !== false ? 'checked' : ''}
+                  onchange="document.getElementById('cfg-pct-feriado').disabled=!this.checked"/>
+                <div class="w-9 h-5 bg-gray-200 dark:bg-gray-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+              </label>
+            </div>
           </div>
         </div>
 
@@ -1824,8 +1900,15 @@ async function salvarConfiguracoes() {
   if (isNaN(horasM)  || horasM <= 0) { showToast('Horas mensais inválidas.', 'error'); return; }
   if (isNaN(jornada) || jornada <= 0 || jornada > 24) { showToast('Jornada diária inválida.', 'error'); return; }
 
+  // Exibição
+  const exibirTotalDia = document.getElementById('cfg-exibir-total-dia')?.value !== 'extras';
+
   // Campos CLT
   const tolerancia         = parseInt(document.getElementById('cfg-tolerancia')?.value || 0);
+  const sabadoHoraExtra    = document.getElementById('cfg-sabado-hora-extra')?.checked !== false;
+  const adicionalSabado    = document.getElementById('cfg-adicional-sabado')?.checked !== false;
+  const pctSabado          = parseFloat(document.getElementById('cfg-pct-sabado')?.value || 50);
+  const domingoHoraExtra   = document.getElementById('cfg-domingo-hora-extra')?.checked !== false;
   const adicionalDomingo   = document.getElementById('cfg-adicional-domingo')?.checked !== false;
   const pctDomingo         = parseFloat(document.getElementById('cfg-pct-domingo')?.value || 100);
   const adicionalFeriado   = document.getElementById('cfg-adicional-feriado')?.checked !== false;
@@ -1838,8 +1921,10 @@ async function salvarConfiguracoes() {
   const novo = Object.assign({}, App.config, {
     salario, horasMensais: horasM, jornadaDiaria: jornada,
     percentualHoraExtra: percentual, nomeFuncionario: nomeFun, nomeEmpresa: nomeEmp,
+    exibirTotalDia,
     toleranciaHoraExtra: tolerancia,
-    adicionalDomingo, percentualAdicionalDomingo: pctDomingo,
+    sabadoHoraExtra,  adicionalSabado,  percentualAdicionalSabado: pctSabado,
+    domingoHoraExtra, adicionalDomingo, percentualAdicionalDomingo: pctDomingo,
     adicionalFeriado,  percentualAdicionalFeriado: pctFeriado,
     calcularNoturno,   percentualAdicionalNoturno: pctNoturno,
     horaNoturnaReduzida: horaNReduzida,

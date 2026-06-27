@@ -129,15 +129,26 @@ const CONFIG_PADRAO = {
   darkMode: false,
   // Regras CLT
   toleranciaHoraExtra: 0,
+  // Sábado — Art. 59 CLT / regime 40h semanais
+  sabadoHoraExtra: true,
+  adicionalSabado: true,
+  percentualAdicionalSabado: 50,
+  // Domingo — Art. 67 CLT
+  domingoHoraExtra: true,
   adicionalDomingo: true,
   percentualAdicionalDomingo: 100,
+  // Feriado — Art. 67 CLT
   adicionalFeriado: true,
   percentualAdicionalFeriado: 100,
+  // Noturno — Art. 73 CLT
   calcularNoturno: true,
   percentualAdicionalNoturno: 20,
   horaNoturnaReduzida: true,
+  // Intrajornada — Art. 71 CLT
   verificarIntrajornada: true,
   feriadosPersonalizados: [],
+  // Exibição
+  exibirTotalDia: true,
   atualizadoEm: null
 };
 
