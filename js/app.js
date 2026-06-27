@@ -493,7 +493,6 @@ function _renderFormRegistro(config) {
             type="date"
             id="input-data"
             value="${App.form.data}"
-            max="${getDataHoje()}"
             class="input-base"
           />
         </div>
@@ -821,7 +820,7 @@ async function _duplicarRegistroAtual() {
       <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">
         Selecione a data de destino para os mesmos horários de <strong>${formatarData(App.form.data)}</strong>.
       </p>
-      <input type="date" id="dup-data" class="input-base" value="${getDataHoje()}" max="${getDataHoje()}"/>
+      <input type="date" id="dup-data" class="input-base" value="${getDataHoje()}"/>
     `,
     footer: `
       <button onclick="hideModal()"
@@ -1146,7 +1145,7 @@ async function _iniciarDuplicarRegistro(id) {
       <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">
         Duplicar os horários de <strong>${formatarData(reg.data)}</strong> para:
       </p>
-      <input type="date" id="dup-data2" class="input-base" value="${getDataHoje()}" max="${getDataHoje()}"/>
+      <input type="date" id="dup-data2" class="input-base" value="${getDataHoje()}"/>
     `,
     footer: `
       <button onclick="hideModal()"
@@ -1228,8 +1227,7 @@ function _renderCalMes() {
           ${getNomeMes(mes - 1)} ${ano}
         </h2>
         <button onclick="_navCalendario(1)"
-          class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors
-                 ${mes === getMesAtual() && ano === getAnoAtual() ? 'opacity-40 cursor-not-allowed' : ''}">
+          class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors">
           <svg class="w-5 h-5 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
           </svg>
@@ -1327,10 +1325,6 @@ function _navCalendario(delta) {
   if (mes > 12) { mes = 1;  ano++; }
   if (mes < 1)  { mes = 12; ano--; }
 
-  // Não permitir ir além do mês atual
-  const agora = new Date();
-  if (ano > agora.getFullYear() || (ano === agora.getFullYear() && mes > agora.getMonth() + 1)) return;
-
   App.calMes = mes;
   App.calAno = ano;
   _renderCalMes();
@@ -1350,8 +1344,6 @@ async function _abrirDiaCalendario(dataStr) {
       `
     });
   } else {
-    // Verificar se é data futura
-    if (dataStr > getDataHoje()) return;
     showConfirm({
       title: formatarDataLonga(dataStr),
       message: 'Não há registro para este dia. Deseja registrá-lo agora?',
