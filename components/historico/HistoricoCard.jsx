@@ -7,7 +7,7 @@ import {
   formatarData
 } from '@/lib/utils'
 
-export default function HistoricoCard({ registro, resumo, config, onEdit, onDuplicate, onDelete }) {
+export default function HistoricoCard({ registro, resumo, config, isFuturo, onEdit, onDuplicate, onDelete }) {
   const [expanded, setExpanded] = useState(false)
 
   const bancoPos  = resumo.bancoHoras >= 0
@@ -37,7 +37,7 @@ export default function HistoricoCard({ registro, resumo, config, onEdit, onDupl
   const exibirTotal = config?.exibirTotalDia !== false
 
   return (
-    <div className="history-card card-hover">
+    <div className={`history-card card-hover ${isFuturo ? 'border-dashed border-blue-200 dark:border-blue-800 bg-blue-50/30 dark:bg-blue-900/10' : ''}`}>
       {/* Cabeçalho clicável */}
       <button
         className="w-full text-left"
@@ -45,7 +45,14 @@ export default function HistoricoCard({ registro, resumo, config, onEdit, onDupl
       >
         <div className="flex items-start justify-between px-4 pt-4 pb-2">
           <div>
-            <p className="text-xs text-gray-400 dark:text-gray-500 font-medium">{getDiaSemanaCurto(registro.data)}</p>
+            <div className="flex items-center gap-2">
+              <p className="text-xs text-gray-400 dark:text-gray-500 font-medium">{getDiaSemanaCurto(registro.data)}</p>
+              {isFuturo && (
+                <span className="text-xs font-semibold px-1.5 py-0.5 rounded-md bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400">
+                  futuro
+                </span>
+              )}
+            </div>
             <h3 className="text-base font-bold text-gray-900 dark:text-white">{formatarData(registro.data)}</h3>
             {registro.observacao && (
               <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate max-w-50">{registro.observacao}</p>

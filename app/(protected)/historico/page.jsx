@@ -4,7 +4,7 @@ import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { toast } from 'sonner'
 import HistoricoCard from '@/components/historico/HistoricoCard'
 import { calcularResumo } from '@/lib/calculations'
-import { getMesAtual, getAnoAtual, getNomeMes, formatarDuracao, formatarMoeda } from '@/lib/utils'
+import { getMesAtual, getAnoAtual, getNomeMes, formatarDuracao, formatarMoeda, getDataHoje } from '@/lib/utils'
 
 const MESES = Array.from({ length: 12 }, (_, i) => ({ value: i + 1, label: getNomeMes(i) }))
 
@@ -76,11 +76,18 @@ export default function HistoricoPage() {
   function handleEdit(id) { router.push(`/registrar?id=${id}`) }
   function handleDuplicate(data) { router.push(`/registrar?data=${data}`) }
 
-  const resumoMes = config && registros.length > 0 ? {
-    totalMin:   registros.reduce((s, r) => s + calcularResumo(r, config).horasTrabalhadas, 0),
-    totalBanco: registros.reduce((s, r) => s + calcularResumo(r, config).bancoHoras, 0),
-    totalGeral: registros.reduce((s, r) => s + calcularResumo(r, config).totalDia, 0)
-  } : null
+  const hoje = getDataHoje()
+
+  const regsFuturos  = registros.filter(r => r.data > hoje)
+  const regsPassados = registros.filter(r => r.data <= hoje)
+
+  const somarResumos = (regs) => regs.reduce((s, r) => {
+    const res = calcularResumo(r, config)
+    return { totalMin: s.totalMin + res.horasTrabalhadas, totalBanco: s.totalBanco + res.bancoHoras, totalGeral: s.totalGeral + res.totalDia }
+  }, { totalMin: 0, totalBanco: 0, totalGeral: 0 })
+
+  const resumoReal     = config && registros.length > 0 ? somarResumos(regsPassados) : null
+  const resumoProjecao = config && regsFuturos.length > 0 ? somarResumos(registros) : null
 
   const anos = Array.from({ length: 5 }, (_, i) => getAnoAtual() - 2 + i)
 
@@ -156,22 +163,48 @@ export default function HistoricoPage() {
       </div>
 
       {/* Resumo da página */}
-      {resumoMes && !loading && (
-        <div className="grid grid-cols-3 gap-2 text-center">
-          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-2">
-            <p className="text-xs text-gray-500 dark:text-gray-400">Trabalhado</p>
-            <p className="text-sm font-bold text-gray-900 dark:text-white">{formatarDuracao(resumoMes.totalMin)}</p>
+      {resumoReal && !loading && (
+        <div className="space-y-2">
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-2">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Trabalhado</p>
+              <p className="text-sm font-bold text-gray-900 dark:text-white">{formatarDuracao(resumoReal.totalMin)}</p>
+            </div>
+            <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-2">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Banco</p>
+              <p className={`text-sm font-bold ${resumoReal.totalBanco >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
+                {formatarDuracao(resumoReal.totalBanco, true)}
+              </p>
+            </div>
+            <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-2">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Total</p>
+              <p className="text-sm font-bold text-gray-900 dark:text-white">{formatarMoeda(resumoReal.totalGeral)}</p>
+            </div>
           </div>
-          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-2">
-            <p className="text-xs text-gray-500 dark:text-gray-400">Banco</p>
-            <p className={`text-sm font-bold ${resumoMes.totalBanco >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
-              {formatarDuracao(resumoMes.totalBanco, true)}
-            </p>
-          </div>
-          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-2">
-            <p className="text-xs text-gray-500 dark:text-gray-400">Total</p>
-            <p className="text-sm font-bold text-gray-900 dark:text-white">{formatarMoeda(resumoMes.totalGeral)}</p>
-          </div>
+
+          {resumoProjecao && (
+            <div className="rounded-xl border border-dashed border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10 p-2">
+              <p className="text-xs text-blue-500 dark:text-blue-400 font-semibold mb-1.5">
+                Projeção com {regsFuturos.length} dia{regsFuturos.length !== 1 ? 's' : ''} futuro{regsFuturos.length !== 1 ? 's' : ''}
+              </p>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <p className="text-xs text-blue-400 dark:text-blue-500">Trabalhado</p>
+                  <p className="text-sm font-bold text-blue-700 dark:text-blue-300">{formatarDuracao(resumoProjecao.totalMin)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-blue-400 dark:text-blue-500">Banco</p>
+                  <p className={`text-sm font-bold ${resumoProjecao.totalBanco >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
+                    {formatarDuracao(resumoProjecao.totalBanco, true)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-blue-400 dark:text-blue-500">Total</p>
+                  <p className="text-sm font-bold text-blue-700 dark:text-blue-300">{formatarMoeda(resumoProjecao.totalGeral)}</p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -200,6 +233,7 @@ export default function HistoricoPage() {
                 registro={registro}
                 resumo={resumo}
                 config={config}
+                isFuturo={registro.data > hoje}
                 onEdit={handleEdit}
                 onDuplicate={handleDuplicate}
                 onDelete={handleDelete}

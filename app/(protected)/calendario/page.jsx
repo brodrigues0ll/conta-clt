@@ -58,7 +58,13 @@ export default function CalendarioPage() {
     })
   }
 
-  const resumoMes = config ? calcularResumoMensal(registros, config, mes, ano) : null
+  const registrosReais   = registros.filter(r => r.data <= hoje)
+  const registrosFuturos = registros.filter(r => r.data > hoje)
+  const prefixMes = `${ano}-${String(mes).padStart(2, '0')}`
+  const temFuturosMes = registrosFuturos.some(r => r.data.startsWith(prefixMes))
+
+  const resumoMes     = config ? calcularResumoMensal(registrosReais, config, mes, ano) : null
+  const resumoMesProj = config && temFuturosMes ? calcularResumoMensal(registros, config, mes, ano) : null
   const selectedRegistro = selectedDay ? registrosPorData[selectedDay] : null
   const selectedResumo = selectedDay && config && selectedRegistro
     ? calcularResumo(selectedRegistro, config) : null
@@ -247,6 +253,40 @@ export default function CalendarioPage() {
               </div>
             )}
           </div>
+
+          {resumoMesProj && (
+            <div className="mt-3 pt-3 border-t border-dashed border-blue-200 dark:border-blue-800">
+              <p className="text-xs font-semibold text-blue-500 dark:text-blue-400 mb-2">
+                Projeção ({registrosFuturos.filter(r => r.data.startsWith(prefixMes)).length} dia{registrosFuturos.filter(r => r.data.startsWith(prefixMes)).length !== 1 ? 's' : ''} futuro{registrosFuturos.filter(r => r.data.startsWith(prefixMes)).length !== 1 ? 's' : ''})
+              </p>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-xs text-blue-400 dark:text-blue-500">Dias</p>
+                  <p className="font-semibold text-blue-700 dark:text-blue-300">{resumoMesProj.totalDias}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-blue-400 dark:text-blue-500">Trabalhado</p>
+                  <p className="font-semibold text-blue-700 dark:text-blue-300">{formatarDuracao(resumoMesProj.totalMinutosTrabalhados)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-blue-400 dark:text-blue-500">Banco</p>
+                  <p className={`font-semibold ${resumoMesProj.totalBancoHoras >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
+                    {formatarDuracao(resumoMesProj.totalBancoHoras, true)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-blue-400 dark:text-blue-500">Extras</p>
+                  <p className="font-semibold text-blue-700 dark:text-blue-300">{formatarDuracao(resumoMesProj.totalExtrasMinutos, true)}</p>
+                </div>
+                {config?.salario > 0 && (
+                  <div className="col-span-2">
+                    <p className="text-xs text-blue-400 dark:text-blue-500">Total do mês</p>
+                    <p className="font-bold text-blue-700 dark:text-blue-300">{formatarMoeda(resumoMesProj.totalGeral)}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

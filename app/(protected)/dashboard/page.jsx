@@ -54,10 +54,18 @@ export default async function DashboardPage() {
 
   const cfg = JSON.parse(JSON.stringify(config))
 
-  const resumoMes  = calcularResumoMensal(regs, cfg, mes, ano)
-  const resumoAnual = calcularResumoAnual(regs, cfg, ano)
-  const registroHoje = regs.find(r => r.data === hoje)
-  const resumoHoje   = registroHoje ? calcularResumo(registroHoje, cfg) : null
+  const prefixMes   = `${ano}-${String(mes).padStart(2, '0')}`
+  const regsReais   = regs.filter(r => r.data <= hoje)
+  const regsFuturos = regs.filter(r => r.data > hoje)
+  const temFuturosMes = regsFuturos.some(r => r.data.startsWith(prefixMes))
+  const temFuturosAno = regsFuturos.length > 0
+
+  const resumoMes       = calcularResumoMensal(regsReais, cfg, mes, ano)
+  const resumoMesProj   = temFuturosMes ? calcularResumoMensal(regs, cfg, mes, ano) : null
+  const resumoAnual     = calcularResumoAnual(regsReais, cfg, ano)
+  const resumoAnualProj = temFuturosAno ? calcularResumoAnual(regs, cfg, ano) : null
+  const registroHoje    = regs.find(r => r.data === hoje)
+  const resumoHoje      = registroHoje ? calcularResumo(registroHoje, cfg) : null
 
   const ultimosDias = []
   for (let i = 13; i >= 0; i--) {
@@ -81,6 +89,9 @@ export default async function DashboardPage() {
   const bancoMesCls = resumoMes.totalBancoHoras >= 0
     ? 'text-emerald-600 dark:text-emerald-400'
     : 'text-red-500 dark:text-red-400'
+  const bancoMesProjCls = resumoMesProj
+    ? resumoMesProj.totalBancoHoras >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'
+    : ''
 
   return (
     <div className="py-4 space-y-5">
@@ -107,35 +118,63 @@ export default async function DashboardPage() {
       </div>
 
       {/* Grid de estatísticas */}
-      <div className="grid grid-cols-2 gap-3">
-        <StatCard
-          title="Dias trabalhados"
-          value={resumoMes.totalDias}
-          subtitle="no mês"
-          color="indigo"
-          accent="indigo"
-        />
-        <StatCard
-          title="Horas trabalhadas"
-          value={formatarDuracao(resumoMes.totalMinutosTrabalhados)}
-          subtitle="no mês"
-          color="indigo"
-          accent="indigo"
-        />
-        <div className={`bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-gray-700 stat-accent-${resumoMes.totalBancoHoras >= 0 ? 'green' : 'rose'}`}>
-          <p className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wide leading-none">Banco de horas</p>
-          <p className={`text-xl font-bold mt-1 leading-tight ${bancoMesCls}`}>
-            {formatarDuracao(resumoMes.totalBancoHoras, true)}
-          </p>
-          <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">no mês</p>
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <StatCard
+            title="Dias trabalhados"
+            value={resumoMes.totalDias}
+            subtitle="no mês"
+            color="indigo"
+            accent="indigo"
+          />
+          <StatCard
+            title="Horas trabalhadas"
+            value={formatarDuracao(resumoMes.totalMinutosTrabalhados)}
+            subtitle="no mês"
+            color="indigo"
+            accent="indigo"
+          />
+          <div className={`bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-gray-700 stat-accent-${resumoMes.totalBancoHoras >= 0 ? 'green' : 'rose'}`}>
+            <p className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wide leading-none">Banco de horas</p>
+            <p className={`text-xl font-bold mt-1 leading-tight ${bancoMesCls}`}>
+              {formatarDuracao(resumoMes.totalBancoHoras, true)}
+            </p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">no mês</p>
+          </div>
+          <StatCard
+            title="Valor extras"
+            value={formatarMoeda(resumoMes.totalValorExtras)}
+            subtitle="no mês"
+            color="green"
+            accent="green"
+          />
         </div>
-        <StatCard
-          title="Valor extras"
-          value={formatarMoeda(resumoMes.totalValorExtras)}
-          subtitle="no mês"
-          color="green"
-          accent="green"
-        />
+
+        {resumoMesProj && (
+          <div className="rounded-2xl border border-dashed border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10 p-3">
+            <p className="text-xs font-semibold text-blue-500 dark:text-blue-400 mb-2">
+              Projeção do mês ({regsFuturos.filter(r => r.data.startsWith(prefixMes)).length} dia{regsFuturos.filter(r => r.data.startsWith(prefixMes)).length !== 1 ? 's' : ''} futuro{regsFuturos.filter(r => r.data.startsWith(prefixMes)).length !== 1 ? 's' : ''})
+            </p>
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <div>
+                <p className="text-xs text-blue-400 dark:text-blue-500">Dias</p>
+                <p className="font-bold text-blue-700 dark:text-blue-300">{resumoMesProj.totalDias}</p>
+              </div>
+              <div>
+                <p className="text-xs text-blue-400 dark:text-blue-500">Horas</p>
+                <p className="font-bold text-blue-700 dark:text-blue-300">{formatarDuracao(resumoMesProj.totalMinutosTrabalhados)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-blue-400 dark:text-blue-500">Banco</p>
+                <p className={`font-bold ${bancoMesProjCls}`}>{formatarDuracao(resumoMesProj.totalBancoHoras, true)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-blue-400 dark:text-blue-500">Extras</p>
+                <p className="font-bold text-blue-700 dark:text-blue-300">{formatarMoeda(resumoMesProj.totalValorExtras)}</p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Hoje */}
@@ -227,6 +266,34 @@ export default async function DashboardPage() {
             <p className="font-bold text-emerald-600 dark:text-emerald-400">{formatarMoeda(resumoAnual.totalValorExtras)}</p>
           </div>
         </div>
+
+        {resumoAnualProj && (
+          <div className="mt-3 pt-3 border-t border-dashed border-blue-200 dark:border-blue-800">
+            <p className="text-xs font-semibold text-blue-500 dark:text-blue-400 mb-2">
+              Projeção anual ({regsFuturos.length} dia{regsFuturos.length !== 1 ? 's' : ''} futuro{regsFuturos.length !== 1 ? 's' : ''})
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-xs text-blue-400 dark:text-blue-500">Dias</p>
+                <p className="font-bold text-blue-700 dark:text-blue-300">{resumoAnualProj.totalDias}</p>
+              </div>
+              <div>
+                <p className="text-xs text-blue-400 dark:text-blue-500">Horas</p>
+                <p className="font-bold text-blue-700 dark:text-blue-300">{formatarDuracao(resumoAnualProj.totalMinutosTrabalhados)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-blue-400 dark:text-blue-500">Banco</p>
+                <p className={`font-bold ${resumoAnualProj.totalBancoHoras >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
+                  {formatarDuracao(resumoAnualProj.totalBancoHoras, true)}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-blue-400 dark:text-blue-500">Extras</p>
+                <p className="font-bold text-blue-700 dark:text-blue-300">{formatarMoeda(resumoAnualProj.totalValorExtras)}</p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
     </div>
