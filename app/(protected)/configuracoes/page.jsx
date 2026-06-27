@@ -214,8 +214,43 @@ function parseColetaPontosRows(rows) {
     .sort((a, b) => a.data.localeCompare(b.data))
 }
 
-function detectarTipoXLS(wb) {
-  return (wb.SheetNames[0] || '') === 'Coleta de Pontos Originais' ? 'coleta' : 'rfp'
+/* RFP Simplificado: sheet report_folha_ponto, c0=serial data, c2=dia semana, c10=string "HH:MM HH:MM | ..."
+   Detectado quando c10 é string contendo horários (vs RFP Detalhado onde c10 é serial numérico) */
+function parseRFPSimplificadoRows(rows) {
+  const mapa = {}
+  for (const row of rows) {
+    const c0 = row[0], c2 = row[2], c10 = row[10]
+    if (typeof c0 !== 'number' || c0 <= 40000 || typeof c2 !== 'string') continue
+    if (!c10 || typeof c10 !== 'string') continue
+    const batidas = []
+    for (const par of c10.split('|')) {
+      for (const h of (par.match(/\d{1,2}:\d{2}/g) || [])) {
+        const [hh, mm] = h.split(':').map(Number)
+        const norm = String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0')
+        if (!batidas.includes(norm)) batidas.push(norm)
+      }
+    }
+    if (batidas.length > 0)
+      mapa[xlSerialToDateStr(c0)] = batidas.sort((a, b) => horaParaMinutos(a) - horaParaMinutos(b))
+  }
+  return Object.entries(mapa)
+    .map(([data, batidas]) => ({ data, batidas, observacao: '' }))
+    .sort((a, b) => a.data.localeCompare(b.data))
+}
+
+function detectarTipoXLS(wb, rows) {
+  const sheet = wb.SheetNames[0] || ''
+  if (sheet === 'Coleta de Pontos Originais') return 'coleta'
+  if (sheet === 'report_folha_ponto') {
+    // RFP Detalhado: c10 é serial numérico; RFP Simplificado: c10 é string de horários
+    for (const row of rows) {
+      const c0 = row[0], c10 = row[10]
+      if (typeof c0 !== 'number' || c0 <= 40000) continue
+      if (typeof c10 === 'string' && /\d{1,2}:\d{2}/.test(c10)) return 'rfp_simples'
+      if (typeof c10 === 'number' && c10 > 40000) return 'rfp'
+    }
+  }
+  return 'rfp'
 }
 
 /* Remove batidas que estão dentro de `toleranciaMin` do ponto anterior.
@@ -593,8 +628,10 @@ export default function ConfiguracoesPage() {
         const wb   = XLSX.read(data, { type: 'array', raw: true })
         const ws   = wb.Sheets[wb.SheetNames[0]]
         const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null })
-        const tipo = detectarTipoXLS(wb)
-        const regs = tipo === 'coleta' ? parseColetaPontosRows(rows) : parseRFPRows(rows)
+        const tipo = detectarTipoXLS(wb, rows)
+        const regs = tipo === 'coleta'    ? parseColetaPontosRows(rows)
+          : tipo === 'rfp_simples' ? parseRFPSimplificadoRows(rows)
+          : parseRFPRows(rows)
         todosRegistros.push(regs)
       }
 
