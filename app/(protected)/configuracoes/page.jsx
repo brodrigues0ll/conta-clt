@@ -289,14 +289,23 @@ function mesclarRegistrosXLS(lista) {
 ───────────────────────────────────────── */
 
 function ModalRFP({ registrosRFP, registrosExistentes, onClose, onConfirm }) {
-  const [modo, setModo] = useState('merge')
+  const [modo, setModo] = useState('completar')
 
-  const existentes  = new Set(registrosExistentes.map(r => r.data))
-  const conflitos   = registrosRFP.filter(r => existentes.has(r.data))
-  const novos       = registrosRFP.filter(r => !existentes.has(r.data))
-  const total       = registrosRFP.length
-  const temConflitos = conflitos.length > 0
+  // Mapa data → batidas existentes no banco
+  const existentesMap = new Map(registrosExistentes.map(r => [r.data, r.batidas || []]))
 
+  const novos = registrosRFP.filter(r => !existentesMap.has(r.data))
+  const emConflito = registrosRFP.filter(r => existentesMap.has(r.data))
+
+  // Dias que têm pontos novos a acrescentar (arquivo tem batidas que o BD não tem)
+  const aCompletar = emConflito.filter(r => {
+    const eb = existentesMap.get(r.data)
+    return deduplicarBatidas([...eb, ...r.batidas]).length > eb.length
+  })
+  // Dias cujos pontos do arquivo já estão todos no banco
+  const semAlteracao = emConflito.length - aCompletar.length
+
+  const total    = registrosRFP.length
   const datas    = registrosRFP.map(r => r.data).sort()
   const primeira = datas[0]
   const ultima   = datas[datas.length - 1]
@@ -308,7 +317,9 @@ function ModalRFP({ registrosRFP, registrosExistentes, onClose, onConfirm }) {
     porMes[chave].push(r)
   })
 
-  const qtImportar = modo === 'replace' ? total : novos.length
+  const qtImportar = modo === 'substituir'
+    ? total
+    : novos.length + aCompletar.length
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
@@ -336,17 +347,17 @@ function ModalRFP({ registrosRFP, registrosExistentes, onClose, onConfirm }) {
 
           {/* Stats */}
           <div className="grid grid-cols-3 gap-2">
-            <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/40 rounded-xl p-3 text-center">
-              <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{total}</p>
-              <p className="text-xs text-indigo-500 dark:text-indigo-400 mt-0.5">encontrados</p>
-            </div>
             <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800/40 rounded-xl p-3 text-center">
               <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{novos.length}</p>
               <p className="text-xs text-emerald-500 dark:text-emerald-400 mt-0.5">novos</p>
             </div>
-            <div className={`${temConflitos ? 'bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800/40' : 'bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-600/40'} rounded-xl p-3 text-center`}>
-              <p className={`text-2xl font-bold ${temConflitos ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'}`}>{conflitos.length}</p>
-              <p className={`text-xs mt-0.5 ${temConflitos ? 'text-amber-500 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'}`}>conflitos</p>
+            <div className={`${aCompletar.length > 0 ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/40' : 'bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-600/40'} rounded-xl p-3 text-center`}>
+              <p className={`text-2xl font-bold ${aCompletar.length > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'}`}>{aCompletar.length}</p>
+              <p className={`text-xs mt-0.5 ${aCompletar.length > 0 ? 'text-blue-500 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'}`}>a completar</p>
+            </div>
+            <div className="bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-600/40 rounded-xl p-3 text-center">
+              <p className="text-2xl font-bold text-gray-400 dark:text-gray-500">{semAlteracao}</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">sem alteração</p>
             </div>
           </div>
 
@@ -362,23 +373,31 @@ function ModalRFP({ registrosRFP, registrosExistentes, onClose, onConfirm }) {
             </span>
           </div>
 
-          {/* Conflitos */}
-          {temConflitos && (
-            <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-200 dark:border-amber-800 overflow-hidden">
-              <div className="px-4 py-3 border-b border-amber-100 dark:border-amber-800/60">
-                <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">
-                  ⚠ {conflitos.length} conflito{conflitos.length !== 1 ? 's' : ''} — escolha como importar
-                </p>
+          {/* Modo de importação */}
+          {emConflito.length > 0 && (
+            <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+              <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-700/60 border-b border-gray-100 dark:border-gray-700">
+                <p className="text-xs font-semibold text-gray-600 dark:text-gray-400">Como tratar os dias já existentes no banco?</p>
               </div>
               <div className="p-3 space-y-2">
                 {[
-                  { value: 'merge', title: 'Importar apenas novos', desc: `${novos.length} novo${novos.length !== 1 ? 's' : ''} · mantém os ${conflitos.length} existente${conflitos.length !== 1 ? 's' : ''}` },
-                  { value: 'replace', title: 'Substituir todos', desc: `${total} registros · sobrescreve os ${conflitos.length} existente${conflitos.length !== 1 ? 's' : ''}` },
+                  {
+                    value: 'completar',
+                    title: 'Completar pontos faltantes',
+                    desc: aCompletar.length > 0
+                      ? `Insere ${novos.length} novo${novos.length !== 1 ? 's' : ''} e completa ${aCompletar.length} dia${aCompletar.length !== 1 ? 's' : ''} com pontos ausentes`
+                      : `Insere ${novos.length} novo${novos.length !== 1 ? 's' : ''} · nenhum dia existente precisa de complemento`,
+                  },
+                  {
+                    value: 'substituir',
+                    title: 'Substituir todos',
+                    desc: `Sobrescreve ${emConflito.length} dia${emConflito.length !== 1 ? 's' : ''} existente${emConflito.length !== 1 ? 's' : ''} + insere ${novos.length} novo${novos.length !== 1 ? 's' : ''}`,
+                  },
                 ].map(opt => (
                   <label key={opt.value} className={`flex items-start gap-3 p-3 rounded-xl cursor-pointer border transition-all ${
                     modo === opt.value
                       ? 'border-indigo-300 dark:border-indigo-700 bg-indigo-50/80 dark:bg-indigo-900/30'
-                      : 'border-white dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/40'
+                      : 'border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/40'
                   }`}>
                     <input type="radio" name="rfp-modo" value={opt.value} checked={modo === opt.value} onChange={() => setModo(opt.value)} className="mt-0.5 accent-indigo-600 shrink-0" />
                     <div>
@@ -405,12 +424,16 @@ function ModalRFP({ registrosRFP, registrosExistentes, onClose, onConfirm }) {
                       </p>
                     </div>
                     {regs.map(r => {
-                      const conflito = existentes.has(r.data)
+                      const eb = existentesMap.get(r.data)
+                      const estado = !eb ? 'novo'
+                        : deduplicarBatidas([...eb, ...r.batidas]).length > eb.length ? 'a_completar'
+                        : 'sem_alteracao'
+                      const cor  = estado === 'novo' ? 'text-emerald-500' : estado === 'a_completar' ? 'text-blue-500' : 'text-gray-300 dark:text-gray-600'
+                      const icon = estado === 'novo' ? '✓' : estado === 'a_completar' ? '+' : '='
+                      const bg   = estado === 'a_completar' ? 'bg-blue-50/50 dark:bg-blue-900/10' : 'bg-white dark:bg-gray-800'
                       return (
-                        <div key={r.data} className={`flex items-center gap-2.5 py-2 px-3 text-xs ${conflito ? 'bg-amber-50/60 dark:bg-amber-900/10' : 'bg-white dark:bg-gray-800'}`}>
-                          <span className={`shrink-0 font-bold ${conflito ? 'text-amber-500' : 'text-emerald-500'}`}>
-                            {conflito ? '⚠' : '✓'}
-                          </span>
+                        <div key={r.data} className={`flex items-center gap-2.5 py-2 px-3 text-xs ${bg} ${estado === 'sem_alteracao' ? 'opacity-50' : ''}`}>
+                          <span className={`shrink-0 font-bold ${cor}`}>{icon}</span>
                           <span className="font-medium text-gray-700 dark:text-gray-300 w-20 shrink-0">{formatarData(r.data)}</span>
                           <span className="text-gray-400 dark:text-gray-500 truncate">{getDiaSemanaCurto(r.data)} · {r.batidas.join(' → ')}</span>
                         </div>
@@ -428,8 +451,8 @@ function ModalRFP({ registrosRFP, registrosExistentes, onClose, onConfirm }) {
           <button onClick={onClose} className="flex-1 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
             Cancelar
           </button>
-          <button onClick={() => onConfirm(modo)} className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold transition-colors">
-            Importar {qtImportar} registro{qtImportar !== 1 ? 's' : ''}
+          <button onClick={() => onConfirm(modo)} disabled={qtImportar === 0} className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white rounded-xl text-sm font-semibold transition-colors">
+            {qtImportar === 0 ? 'Nada a importar' : `Importar ${qtImportar} registro${qtImportar !== 1 ? 's' : ''}`}
           </button>
         </div>
       </div>
@@ -655,7 +678,13 @@ export default function ConfiguracoesPage() {
       fetchBackups()
       const res    = await fetch('/api/registros/importar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ registros: rfpData.registrosRFP, modo }) })
       const result = await res.json()
-      toast.success(`Concluído! ${result.importados} importados, ${result.substituidos} substituídos, ${result.ignorados} ignorados.`)
+      const partes = [
+        result.importados   > 0 ? `${result.importados} inseridos`  : null,
+        result.completados  > 0 ? `${result.completados} completados` : null,
+        result.substituidos > 0 ? `${result.substituidos} substituídos` : null,
+        result.ignorados    > 0 ? `${result.ignorados} sem alteração`   : null,
+      ].filter(Boolean)
+      toast.success(`Concluído! ${partes.join(', ') || 'Nenhuma alteração necessária'}.`)
     } catch (err) { toast.error(`Erro ao importar: ${err.message}`) }
     finally { setImportando(false) }
   }
