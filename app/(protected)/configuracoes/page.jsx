@@ -218,19 +218,32 @@ function detectarTipoXLS(wb) {
   return (wb.SheetNames[0] || '') === 'Coleta de Pontos Originais' ? 'coleta' : 'rfp'
 }
 
+/* Remove batidas que estão dentro de `toleranciaMin` do ponto anterior.
+   Isso evita duplicatas entre arquivos que registram o mesmo ponto com 1–2 min de diferença. */
+function deduplicarBatidas(batidas, toleranciaMin = 3) {
+  const sorted = [...batidas].sort((a, b) => horaParaMinutos(a) - horaParaMinutos(b))
+  const resultado = []
+  for (const b of sorted) {
+    const minutos = horaParaMinutos(b)
+    const anterior = resultado.length > 0 ? horaParaMinutos(resultado[resultado.length - 1]) : -999
+    if (minutos - anterior > toleranciaMin) resultado.push(b)
+  }
+  return resultado
+}
+
 function mesclarRegistrosXLS(lista) {
   const mapa = {}
   for (const regs of lista) {
     for (const reg of regs) {
-      if (!mapa[reg.data]) mapa[reg.data] = { batidas: new Set(), obs: reg.observacao || '' }
+      if (!mapa[reg.data]) mapa[reg.data] = { batidas: [], obs: reg.observacao || '' }
       else if (reg.observacao) mapa[reg.data].obs += (mapa[reg.data].obs ? ' | ' : '') + reg.observacao
-      reg.batidas.forEach(b => mapa[reg.data].batidas.add(b))
+      mapa[reg.data].batidas.push(...reg.batidas)
     }
   }
   return Object.entries(mapa)
     .map(([data, info]) => ({
       data,
-      batidas: [...info.batidas].sort((a, b) => horaParaMinutos(a) - horaParaMinutos(b)),
+      batidas: deduplicarBatidas(info.batidas),
       observacao: info.obs
     }))
     .sort((a, b) => a.data.localeCompare(b.data))
