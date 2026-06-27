@@ -162,31 +162,23 @@ function extrairObsRFP(obsArr) {
 
 function parseRFPRows(rows) {
   const mapa = {}
-  let dataAtual = null
 
   for (const row of rows) {
-    const c0 = row[0], c4 = row[4], c10 = row[10], c14 = row[14], c20 = row[20]
+    const c10 = row[10], c14 = row[14], c20 = row[20]
 
-    if (c0 === 'Folha de Ponto') { dataAtual = null; continue }
+    // Linha de batida: c10 contém serial de data+hora (parte inteira = data, fracionária = hora)
+    if (typeof c10 !== 'number' || c10 <= 40000) continue
 
-    if (
-      typeof c0 === 'number' && c0 > 40000 && c0 < 47000 &&
-      typeof c4 === 'string' && c4.trim() && c4.trim() !== 'a'
-    ) {
-      dataAtual = xlSerialToDateStr(c0)
-      if (!mapa[dataAtual]) mapa[dataAtual] = { batidas: [], obs: [] }
-      continue
-    }
+    const dateStr = xlSerialToDateStr(Math.floor(c10))
+    const entrada = xlSerialToTimeStr(c10)
+    const saida   = (typeof c14 === 'number' && c14 > 40000) ? xlSerialToTimeStr(c14) : null
 
-    if (dataAtual && typeof c10 === 'number' && c10 > 40000) {
-      const entrada = xlSerialToTimeStr(c10)
-      const saida = (typeof c14 === 'number' && c14 > 40000) ? xlSerialToTimeStr(c14) : null
-      const reg = mapa[dataAtual]
-      if (!reg.batidas.includes(entrada)) reg.batidas.push(entrada)
-      if (saida && !reg.batidas.includes(saida)) reg.batidas.push(saida)
-      const obs = c20 && typeof c20 === 'string' ? c20.trim() : ''
-      if (obs && obs !== ' ') reg.obs.push(obs)
-    }
+    if (!mapa[dateStr]) mapa[dateStr] = { batidas: [], obs: [] }
+    const reg = mapa[dateStr]
+    if (!reg.batidas.includes(entrada)) reg.batidas.push(entrada)
+    if (saida && !reg.batidas.includes(saida)) reg.batidas.push(saida)
+    const obs = c20 && typeof c20 === 'string' ? c20.trim() : ''
+    if (obs && obs !== ' ') reg.obs.push(obs)
   }
 
   return Object.entries(mapa)
@@ -195,6 +187,51 @@ function parseRFPRows(rows) {
       data,
       batidas: [...info.batidas].sort((a, b) => horaParaMinutos(a) - horaParaMinutos(b)),
       observacao: extrairObsRFP(info.obs)
+    }))
+    .sort((a, b) => a.data.localeCompare(b.data))
+}
+
+function parseColetaPontosRows(rows) {
+  const mapa = {}
+
+  for (const row of rows) {
+    const c3 = row[3]
+    // Cada linha é uma batida: c3 = serial Excel com data (parte inteira) + hora (fração)
+    if (typeof c3 !== 'number' || c3 <= 40000 || c3 === Math.floor(c3)) continue
+
+    const dateStr = xlSerialToDateStr(Math.floor(c3))
+    const timeStr = xlSerialToTimeStr(c3)
+    if (!mapa[dateStr]) mapa[dateStr] = []
+    if (!mapa[dateStr].includes(timeStr)) mapa[dateStr].push(timeStr)
+  }
+
+  return Object.entries(mapa)
+    .map(([data, batidas]) => ({
+      data,
+      batidas: batidas.sort((a, b) => horaParaMinutos(a) - horaParaMinutos(b)),
+      observacao: ''
+    }))
+    .sort((a, b) => a.data.localeCompare(b.data))
+}
+
+function detectarTipoXLS(wb) {
+  return (wb.SheetNames[0] || '') === 'Coleta de Pontos Originais' ? 'coleta' : 'rfp'
+}
+
+function mesclarRegistrosXLS(lista) {
+  const mapa = {}
+  for (const regs of lista) {
+    for (const reg of regs) {
+      if (!mapa[reg.data]) mapa[reg.data] = { batidas: new Set(), obs: reg.observacao || '' }
+      else if (reg.observacao) mapa[reg.data].obs += (mapa[reg.data].obs ? ' | ' : '') + reg.observacao
+      reg.batidas.forEach(b => mapa[reg.data].batidas.add(b))
+    }
+  }
+  return Object.entries(mapa)
+    .map(([data, info]) => ({
+      data,
+      batidas: [...info.batidas].sort((a, b) => horaParaMinutos(a) - horaParaMinutos(b)),
+      observacao: info.obs
     }))
     .sort((a, b) => a.data.localeCompare(b.data))
 }
@@ -235,7 +272,7 @@ function ModalRFP({ registrosRFP, registrosExistentes, onClose, onConfirm }) {
           <div className="flex items-center gap-3">
             <span className="w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center text-lg">📊</span>
             <div>
-              <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Importar Folha de Ponto</h2>
+              <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Importar Planilha de Ponto</h2>
               <p className="text-xs text-gray-400 dark:text-gray-500">Revise antes de confirmar</p>
             </div>
           </div>
@@ -366,7 +403,7 @@ export default function ConfiguracoesPage() {
   const [rfpData, setRfpData]         = useState(null)
   const [importando, setImportando]   = useState(false)
   const inputJsonRef = useRef(null)
-  const inputRfpRef  = useRef(null)
+  const inputXlsRef  = useRef(null)
 
   function set(key, value) { setConfig(prev => ({ ...prev, [key]: value })) }
 
@@ -527,22 +564,34 @@ export default function ConfiguracoesPage() {
     reader.readAsText(file)
   }
 
-  /* ── Importar RFP ── */
+  /* ── Importar XLS (RFP ou ColetaPontos, um ou vários arquivos) ── */
 
-  async function handleImportRFP(e) {
-    const file = e.target.files?.[0]; if (!file) return
+  async function handleImportXLS(e) {
+    const files = Array.from(e.target.files || [])
+    if (!files.length) return
     e.target.value = ''
     setImportando(true)
     try {
       const XLSX = await import('xlsx')
-      const data = new Uint8Array(await file.arrayBuffer())
-      const wb   = XLSX.read(data, { type: 'array', raw: true })
-      const ws   = wb.Sheets[wb.SheetNames[0]]
-      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null })
-      const registrosRFP = parseRFPRows(rows)
-      if (!registrosRFP.length) { toast.warning('Nenhum registro encontrado na planilha.'); return }
+      const todosRegistros = []
+
+      for (const file of files) {
+        const data = new Uint8Array(await file.arrayBuffer())
+        const wb   = XLSX.read(data, { type: 'array', raw: true })
+        const ws   = wb.Sheets[wb.SheetNames[0]]
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null })
+        const tipo = detectarTipoXLS(wb)
+        const regs = tipo === 'coleta' ? parseColetaPontosRows(rows) : parseRFPRows(rows)
+        todosRegistros.push(regs)
+      }
+
+      const registrosXLS = todosRegistros.length === 1
+        ? todosRegistros[0]
+        : mesclarRegistrosXLS(todosRegistros)
+
+      if (!registrosXLS.length) { toast.warning('Nenhum registro encontrado nas planilhas.'); return }
       const { registros: registrosExistentes } = await (await fetch('/api/registros?limit=10000')).json()
-      setRfpData({ registrosRFP, registrosExistentes: registrosExistentes || [] })
+      setRfpData({ registrosRFP: registrosXLS, registrosExistentes: registrosExistentes || [] })
     } catch (err) {
       toast.error(`Erro ao ler planilha: ${err.message}`)
     } finally { setImportando(false) }
@@ -609,7 +658,7 @@ export default function ConfiguracoesPage() {
       )}
 
       <input ref={inputJsonRef} type="file" accept=".json"      className="hidden" onChange={handleImportJSON} />
-      <input ref={inputRfpRef}  type="file" accept=".xls,.xlsx" className="hidden" onChange={handleImportRFP} />
+      <input ref={inputXlsRef}  type="file" accept=".xls,.xlsx" className="hidden" multiple onChange={handleImportXLS} />
 
       {/* Cabeçalho */}
       <div className="flex items-center justify-between">
@@ -833,7 +882,7 @@ export default function ConfiguracoesPage() {
             </div>
           </button>
           <button
-            onClick={() => inputRfpRef.current?.click()}
+            onClick={() => inputXlsRef.current?.click()}
             disabled={importando}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-amber-300 dark:hover:border-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/10 transition-all disabled:opacity-50 group"
           >
@@ -844,9 +893,9 @@ export default function ConfiguracoesPage() {
             </span>
             <div className="text-left">
               <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 group-hover:text-amber-700 dark:group-hover:text-amber-400 transition-colors">
-                {importando ? 'Importando...' : 'Folha de Ponto RFP'}
+                {importando ? 'Importando...' : 'Planilha de Ponto'}
               </p>
-              <p className="text-xs text-gray-400 dark:text-gray-500">Importar planilha .xls / .xlsx com preview</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500">RFP Detalhado ou Coleta de Pontos · um ou vários arquivos</p>
             </div>
           </button>
         </div>
