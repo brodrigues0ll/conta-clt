@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_NAME = 'clt-horas-v1.0.0';
+const CACHE_NAME = 'clt-horas-v1.1.0';
 const CDN_CACHE = 'clt-horas-cdn-v1';
 
 const LOCAL_ASSETS = [
@@ -13,7 +13,9 @@ const LOCAL_ASSETS = [
   './js/ui.js',
   './js/storage.js',
   './js/app.js',
-  './manifest.json'
+  './manifest.json',
+  './icons/icon-192.png',
+  './icons/icon-512.png'
 ];
 
 self.addEventListener('install', (event) => {
