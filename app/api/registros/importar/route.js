@@ -10,6 +10,9 @@ import Registro from '@/models/Registro'
  *
  * merge:   importa apenas datas novas (ignora conflitos)
  * replace: importa todos, substituindo registros existentes
+ *
+ * Usa bulkWrite para processar centenas de registros em 2 roundtrips
+ * ao invés de N×2 queries sequenciais.
  */
 export async function POST(req) {
   const session = await getServerSession(authOptions)
@@ -25,33 +28,58 @@ export async function POST(req) {
   await connectDB()
   const userId = session.user.id
 
-  let importados  = 0
-  let ignorados   = 0
-  let substituidos = 0
+  // Filtrar registros válidos
+  const validos = registros.filter(r => r.data && Array.isArray(r.batidas) && r.batidas.some(b => b && b.trim()))
 
-  for (const r of registros) {
-    if (!r.data || !Array.isArray(r.batidas)) continue
-
-    const batidas = r.batidas.filter(b => b && b.trim())
-    if (batidas.length === 0) continue
-
-    const existing = await Registro.findOne({ userId, data: r.data })
-
-    if (existing) {
-      if (modo === 'replace') {
-        await Registro.updateOne(
-          { userId, data: r.data },
-          { $set: { batidas, observacao: r.observacao || '' } }
-        )
-        substituidos++
-      } else {
-        ignorados++
-      }
-    } else {
-      await Registro.create({ userId, data: r.data, batidas, observacao: r.observacao || '' })
-      importados++
-    }
+  if (validos.length === 0) {
+    return NextResponse.json({ importados: 0, ignorados: 0, substituidos: 0 })
   }
 
-  return NextResponse.json({ importados, ignorados, substituidos })
+  const datas = validos.map(r => r.data)
+
+  if (modo === 'merge') {
+    // 1 query: buscar quais datas já existem
+    const existentes = await Registro.find({ userId, data: { $in: datas } }).select('data').lean()
+    const existentesSet = new Set(existentes.map(e => e.data))
+
+    const novos = validos.filter(r => !existentesSet.has(r.data))
+    const ignorados = validos.length - novos.length
+
+    if (novos.length > 0) {
+      await Registro.insertMany(
+        novos.map(r => ({
+          userId,
+          data: r.data,
+          batidas: r.batidas.filter(b => b && b.trim()),
+          observacao: r.observacao || ''
+        })),
+        { ordered: false }
+      )
+    }
+
+    return NextResponse.json({ importados: novos.length, ignorados, substituidos: 0 })
+  }
+
+  // replace: upsert de todos com bulkWrite
+  const ops = validos.map(r => ({
+    updateOne: {
+      filter: { userId, data: r.data },
+      update: {
+        $set: {
+          batidas: r.batidas.filter(b => b && b.trim()),
+          observacao: r.observacao || ''
+        },
+        $setOnInsert: { userId, data: r.data }
+      },
+      upsert: true
+    }
+  }))
+
+  const result = await Registro.bulkWrite(ops, { ordered: false })
+
+  return NextResponse.json({
+    importados:   result.upsertedCount,
+    ignorados:    0,
+    substituidos: result.modifiedCount
+  })
 }
