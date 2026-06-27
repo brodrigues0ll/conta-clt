@@ -1,22 +1,34 @@
 /* Service Worker — Controle de Horas CLT */
 
-const STATIC_CACHE = 'horas-clt-static-v1'
-const PAGES_CACHE  = 'horas-clt-pages-v1'
-const API_CACHE    = 'horas-clt-api-v1'
+const VERSION      = 'v2'
+const STATIC_CACHE = `horas-clt-static-${VERSION}`
+const PAGES_CACHE  = `horas-clt-pages-${VERSION}`
+const API_CACHE    = `horas-clt-api-${VERSION}`
 const ALL_CACHES   = [STATIC_CACHE, PAGES_CACHE, API_CACHE]
 
 const OFFLINE_URL  = '/offline'
+const NETWORK_TIMEOUT = 4000  // ms antes de cair no cache
 
-/* Instalar: precachear a página offline */
+/* Páginas principais para pré-aquecer o cache no install */
+const PRECACHE_PAGES = [
+  '/dashboard',
+  '/registrar',
+  '/historico',
+  '/calendario',
+  '/configuracoes',
+  OFFLINE_URL,
+]
+
+/* ── Install: pré-cachear páginas e shell offline ── */
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(PAGES_CACHE)
-      .then(cache => cache.add(OFFLINE_URL))
-      .then(() => self.skipWaiting())
+    caches.open(PAGES_CACHE).then(cache =>
+      Promise.allSettled(PRECACHE_PAGES.map(url => cache.add(url)))
+    ).then(() => self.skipWaiting())
   )
 })
 
-/* Ativar: limpar caches antigos */
+/* ── Activate: limpar versões antigas ── */
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys()
@@ -27,70 +39,79 @@ self.addEventListener('activate', event => {
   )
 })
 
-/* Fetch: estratégias por tipo de recurso */
+/* ── Mensagens do cliente ── */
+self.addEventListener('message', event => {
+  if (event.data === 'SKIP_WAITING') self.skipWaiting()
+})
+
+/* ── Helpers ── */
+
+function networkFirstWithTimeout(request, cacheName, timeout = NETWORK_TIMEOUT) {
+  return caches.open(cacheName).then(cache => {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), timeout)
+
+    return fetch(request, { signal: controller.signal })
+      .then(res => {
+        clearTimeout(timer)
+        if (res.ok) cache.put(request, res.clone())
+        return res
+      })
+      .catch(() => {
+        clearTimeout(timer)
+        return cache.match(request)
+      })
+  })
+}
+
+function cacheFirst(request, cacheName) {
+  return caches.open(cacheName).then(cache =>
+    cache.match(request).then(cached => {
+      if (cached) return cached
+      return fetch(request).then(res => {
+        if (res.ok) cache.put(request, res.clone())
+        return res
+      })
+    })
+  )
+}
+
+/* ── Fetch: estratégias por tipo ── */
 self.addEventListener('fetch', event => {
   const { request } = event
   const url = new URL(request.url)
 
-  /* Só interceptar mesma origem, método GET */
+  /* Só mesma origem, GET */
   if (request.method !== 'GET' || url.origin !== location.origin) return
 
-  /* Auth do next-auth: sempre rede (nunca cachear cookies de sessão) */
+  /* next-auth: sempre rede */
   if (url.pathname.startsWith('/api/auth/')) return
 
-  /* Assets estáticos do Next.js (_next/static/*): CacheFirst
-     São nomeados com hash — nunca mudam, podem ficar em cache indefinidamente */
-  if (url.pathname.startsWith('/_next/static/') || url.pathname.startsWith('/_next/image/')) {
-    event.respondWith(
-      caches.open(STATIC_CACHE).then(cache =>
-        cache.match(request).then(cached => {
-          if (cached) return cached
-          return fetch(request).then(res => {
-            if (res.ok) cache.put(request, res.clone())
-            return res
-          })
-        })
-      )
-    )
+  /* Assets com hash do Next.js: CacheFirst (imutáveis) */
+  if (url.pathname.startsWith('/_next/static/') ||
+      url.pathname.startsWith('/_next/image/')  ||
+      url.pathname.match(/\.(png|jpg|svg|ico|woff2?)$/)) {
+    event.respondWith(cacheFirst(request, STATIC_CACHE))
     return
   }
 
-  /* API routes (/api/*): NetworkFirst com fallback para cache
-     Permite uso offline com dados da última visita */
+  /* API routes: NetworkFirst com timeout + fallback JSON de cache */
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(
-      fetch(request)
-        .then(res => {
-          if (res.ok) {
-            caches.open(API_CACHE).then(c => c.put(request, res.clone()))
-          }
-          return res
-        })
-        .catch(() =>
-          caches.match(request).then(cached =>
-            cached || new Response(
-              JSON.stringify({ error: 'offline', message: 'Sem conexão — exibindo dados em cache' }),
-              { status: 503, headers: { 'Content-Type': 'application/json' } }
-            )
-          )
+      networkFirstWithTimeout(request, API_CACHE).then(res =>
+        res || new Response(
+          JSON.stringify({ error: 'offline', cached: false }),
+          { status: 503, headers: { 'Content-Type': 'application/json' } }
         )
+      )
     )
     return
   }
 
-  /* Páginas HTML: NetworkFirst com fallback para cache, depois /offline */
+  /* Páginas: NetworkFirst com timeout → cache → /offline */
   event.respondWith(
-    fetch(request)
-      .then(res => {
-        if (res.ok) {
-          caches.open(PAGES_CACHE).then(c => c.put(request, res.clone()))
-        }
-        return res
-      })
-      .catch(() =>
-        caches.match(request).then(cached =>
-          cached || caches.match(OFFLINE_URL)
-        )
-      )
+    networkFirstWithTimeout(request, PAGES_CACHE).then(res =>
+      res || caches.match(OFFLINE_URL)
+    )
   )
 })
