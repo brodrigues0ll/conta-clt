@@ -187,17 +187,17 @@ export default function RegistrarPage() {
               </div>
               <div>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Banco</p>
-                <p className={`font-semibold ${resumo.bancoHoras >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
-                  {formatarDuracao(resumo.bancoHoras, true)}
+                <p className={`font-semibold ${resumo.incompleto ? 'text-gray-400 dark:text-gray-500' : resumo.bancoHoras >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
+                  {resumo.incompleto ? '—' : formatarDuracao(resumo.bancoHoras, true)}
                 </p>
               </div>
-              {resumo.horasExtras > 0 && (
+              {!resumo.incompleto && resumo.horasExtras > 0 && (
                 <div>
                   <p className="text-xs text-gray-500 dark:text-gray-400">H. extras</p>
                   <p className="font-semibold text-amber-600 dark:text-amber-400">{formatarDuracao(resumo.horasExtras)}</p>
                 </div>
               )}
-              {resumo.minutosNoturnos > 0 && (
+              {!resumo.incompleto && resumo.minutosNoturnos > 0 && (
                 <div>
                   <p className="text-xs text-gray-500 dark:text-gray-400">Noturno</p>
                   <p className="font-semibold text-violet-600 dark:text-violet-400">🌙 {formatarDuracao(resumo.minutosNoturnos)}</p>
@@ -206,7 +206,9 @@ export default function RegistrarPage() {
               {config?.salario > 0 && (
                 <div className="col-span-2 pt-2 border-t border-gray-100 dark:border-gray-700">
                   <p className="text-xs text-gray-500 dark:text-gray-400">Valor do dia</p>
-                  <p className="font-bold text-gray-900 dark:text-white">{formatarMoeda(resumo.totalDia)}</p>
+                  <p className={`font-bold ${resumo.incompleto ? 'text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-white'}`}>
+                    {resumo.incompleto ? '—' : formatarMoeda(resumo.totalDia)}
+                  </p>
                 </div>
               )}
             </div>

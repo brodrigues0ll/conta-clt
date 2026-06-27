@@ -164,16 +164,16 @@ export default function CalendarioPage() {
                 {/* Stats */}
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Trabalhado</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{selectedResumo.incompleto ? 'Em andamento' : 'Trabalhado'}</p>
                     <p className="font-semibold text-gray-900 dark:text-white">{formatarDuracao(selectedResumo.horasTrabalhadas)}</p>
                   </div>
                   <div>
                     <p className="text-xs text-gray-500 dark:text-gray-400">Banco</p>
-                    <p className={`font-semibold ${selectedResumo.bancoHoras >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
-                      {formatarDuracao(selectedResumo.bancoHoras, true)}
+                    <p className={`font-semibold ${selectedResumo.incompleto ? 'text-gray-400 dark:text-gray-500' : selectedResumo.bancoHoras >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
+                      {selectedResumo.incompleto ? '—' : formatarDuracao(selectedResumo.bancoHoras, true)}
                     </p>
                   </div>
-                  {selectedResumo.horasExtras > 0 && (
+                  {!selectedResumo.incompleto && selectedResumo.horasExtras > 0 && (
                     <div>
                       <p className="text-xs text-gray-500 dark:text-gray-400">Extras</p>
                       <p className="font-semibold text-amber-600 dark:text-amber-400">{formatarDuracao(selectedResumo.horasExtras)}</p>
@@ -182,7 +182,9 @@ export default function CalendarioPage() {
                   {config?.salario > 0 && (
                     <div>
                       <p className="text-xs text-gray-500 dark:text-gray-400">Valor do dia</p>
-                      <p className="font-semibold text-gray-900 dark:text-white">{formatarMoeda(selectedResumo.totalDia)}</p>
+                      <p className={`font-semibold ${selectedResumo.incompleto ? 'text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-white'}`}>
+                        {selectedResumo.incompleto ? '—' : formatarMoeda(selectedResumo.totalDia)}
+                      </p>
                     </div>
                   )}
                 </div>

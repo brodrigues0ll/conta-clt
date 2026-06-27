@@ -157,18 +157,18 @@ export default async function DashboardPage() {
             <>
               <div className="grid grid-cols-3 gap-3 mb-3">
                 <div className="text-center">
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mb-0.5">Trabalhado</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mb-0.5">{resumoHoje.incompleto ? 'Em andamento' : 'Trabalhado'}</p>
                   <p className="text-sm font-bold text-gray-900 dark:text-white">{formatarDuracao(resumoHoje.horasTrabalhadas)}</p>
                 </div>
                 <div className="text-center">
                   <p className="text-xs text-gray-400 dark:text-gray-500 mb-0.5">Banco</p>
-                  <p className={`text-sm font-bold ${resumoHoje.bancoHoras >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
-                    {formatarDuracao(resumoHoje.bancoHoras, true)}
+                  <p className={`text-sm font-bold ${resumoHoje.incompleto ? 'text-gray-400 dark:text-gray-500' : resumoHoje.bancoHoras >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
+                    {resumoHoje.incompleto ? '—' : formatarDuracao(resumoHoje.bancoHoras, true)}
                   </p>
                 </div>
                 <div className="text-center">
                   <p className="text-xs text-gray-400 dark:text-gray-500 mb-0.5">Extras</p>
-                  <p className="text-sm font-bold text-indigo-600 dark:text-indigo-400">{formatarMoeda(resumoHoje.valorExtras)}</p>
+                  <p className="text-sm font-bold text-indigo-600 dark:text-indigo-400">{resumoHoje.incompleto ? '—' : formatarMoeda(resumoHoje.valorExtras)}</p>
                 </div>
               </div>
               <div className="flex flex-wrap gap-1.5">
