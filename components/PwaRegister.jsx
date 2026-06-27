@@ -7,7 +7,6 @@ export default function PwaRegister() {
     if (!('serviceWorker' in navigator)) return
 
     navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(reg => {
-      /* Detectar nova versão do SW disponível */
       reg.addEventListener('updatefound', () => {
         const newSW = reg.installing
         if (!newSW) return
@@ -17,10 +16,7 @@ export default function PwaRegister() {
               description: 'Atualize para ter as últimas melhorias.',
               action: {
                 label: 'Atualizar',
-                onClick: () => {
-                  newSW.postMessage('SKIP_WAITING')
-                  window.location.reload()
-                },
+                onClick: () => { newSW.postMessage('SKIP_WAITING') },
               },
               duration: Infinity,
             })
@@ -29,7 +25,6 @@ export default function PwaRegister() {
       })
     }).catch(err => console.error('[SW] Erro ao registrar:', err))
 
-    /* Recarregar quando o SW ativo for trocado (ex: após clicar em Atualizar) */
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       window.location.reload()
     })

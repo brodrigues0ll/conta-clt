@@ -1,6 +1,7 @@
 import Header from './Header'
 import BottomNav from './BottomNav'
 import OfflineBanner from '@/components/OfflineBanner'
+import CacheWarmer from '@/components/CacheWarmer'
 
 export default function AppShell({ children }) {
   return (
@@ -11,6 +12,7 @@ export default function AppShell({ children }) {
         {children}
       </main>
       <BottomNav />
+      <CacheWarmer />
     </div>
   )
 }

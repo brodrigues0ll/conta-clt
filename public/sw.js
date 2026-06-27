@@ -1,11 +1,8 @@
 /* ═══════════════════════════════════════════════════════
-   Service Worker — Controle de Horas CLT
-   Inspirado no pwa-tutorial de fellyph/pwa-tutorial (Workbox)
-   Estratégias: CacheFirst (estáticos), StaleWhileRevalidate (API),
-                NetworkFirst (páginas), Offline fallback
+   Service Worker — Controle de Horas CLT  v4
    ═══════════════════════════════════════════════════════ */
 
-const VERSION      = 'v3'
+const VERSION      = 'v4'
 const STATIC_CACHE = `horas-clt-static-${VERSION}`
 const PAGES_CACHE  = `horas-clt-pages-${VERSION}`
 const API_CACHE    = `horas-clt-api-${VERSION}`
@@ -13,7 +10,7 @@ const ALL_CACHES   = [STATIC_CACHE, PAGES_CACHE, API_CACHE]
 
 const OFFLINE_URL  = '/offline'
 
-/* ── Install: apenas a página offline (servidor pode exigir auth nas outras) ── */
+/* ── Install ── */
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(PAGES_CACHE)
@@ -22,7 +19,7 @@ self.addEventListener('install', event => {
   )
 })
 
-/* ── Activate: limpar caches de versões anteriores ── */
+/* ── Activate: limpar versões antigas ── */
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys()
@@ -33,19 +30,28 @@ self.addEventListener('activate', event => {
   )
 })
 
-/* ── Mensagem do cliente (ex: clicar em "Atualizar" no toast) ── */
+/* ── Mensagem do cliente ── */
 self.addEventListener('message', event => {
   if (event.data === 'SKIP_WAITING') self.skipWaiting()
+
+  /* Cliente pede para aquecer o cache de páginas (chamado após login) */
+  if (event.data?.type === 'WARM_CACHE') {
+    const urls = event.data.urls || []
+    caches.open(PAGES_CACHE).then(cache =>
+      Promise.allSettled(urls.map(url =>
+        fetch(url, { credentials: 'same-origin' })
+          .then(res => { if (res.ok) cache.put(url, res) })
+          .catch(() => {})
+      ))
+    )
+  }
 })
 
 /* ═══════════════════════════════════════════════════════
-   Estratégias de cache (inspiradas no Workbox)
+   Estratégias
    ═══════════════════════════════════════════════════════ */
 
-/**
- * CacheFirst — Workbox usa isso para assets com hash.
- * Nunca vai à rede se o asset já estiver em cache.
- */
+/** CacheFirst — assets com hash (nunca mudam) */
 function cacheFirst(request, cacheName) {
   return caches.open(cacheName).then(cache =>
     cache.match(request).then(cached => {
@@ -58,62 +64,64 @@ function cacheFirst(request, cacheName) {
   )
 }
 
-/**
- * StaleWhileRevalidate — estratégia principal do pwa-tutorial para recursos dinâmicos.
- * 1. Responde IMEDIATAMENTE com o cache (sem esperar rede)
- * 2. Em background, busca da rede e atualiza o cache para a próxima vez
- * 3. Se não tem cache, espera a rede
- * 4. Se offline e sem cache, retorna fallback
- */
-function staleWhileRevalidate(request, cacheName, fallback) {
+/** StaleWhileRevalidate — responde do cache imediatamente, atualiza em background */
+function staleWhileRevalidate(request, cacheName, offlineFallback) {
   return caches.open(cacheName).then(cache =>
     cache.match(request).then(cached => {
       const networkFetch = fetch(request)
-        .then(res => {
-          if (res.ok) cache.put(request, res.clone())
-          return res
-        })
-        .catch(() => cached || fallback)
-
-      /* Se tem cache: serve agora + atualiza em background */
+        .then(res => { if (res.ok) cache.put(request, res.clone()); return res })
+        .catch(() => cached || offlineFallback)
       return cached || networkFetch
     })
   )
 }
 
 /**
- * NetworkFirst com timeout — para páginas HTML.
- * Tenta a rede; se demorar ou falhar, serve do cache.
+ * SmartPage — estratégia para páginas HTML:
+ * • Se JÁ está no cache → StaleWhileRevalidate (resposta instantânea, sem offline indevido)
+ * • Se NÃO está no cache → NetworkFirst com timeout longo
+ * • Tela /offline só aparece quando navigator.onLine === false e não há cache
  */
-function networkFirst(request, cacheName, timeoutMs = 4000) {
-  return caches.open(cacheName).then(cache => {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), timeoutMs)
+function smartPage(request, cacheName) {
+  return caches.open(cacheName).then(cache =>
+    cache.match(request).then(cached => {
+      /* Página já cacheada: serve do cache agora, atualiza em background */
+      if (cached) {
+        fetch(request, { credentials: 'same-origin' })
+          .then(res => { if (res.ok) cache.put(request, res.clone()) })
+          .catch(() => {})
+        return cached
+      }
 
-    return fetch(request, { signal: controller.signal })
-      .then(res => {
-        clearTimeout(timer)
-        if (res.ok) cache.put(request, res.clone())
-        return res
-      })
-      .catch(() => {
-        clearTimeout(timer)
-        return cache.match(request).then(cached => cached || caches.match(OFFLINE_URL))
-      })
-  })
+      /* Página não cacheada: tenta a rede (sem timeout agressivo) */
+      return fetch(request, { credentials: 'same-origin' })
+        .then(res => {
+          if (res.ok) cache.put(request, res.clone())
+          return res
+        })
+        .catch(() => {
+          /* Só mostra /offline se o dispositivo realmente não tem rede */
+          if (!navigator.onLine) return caches.match(OFFLINE_URL)
+          /* Se tem rede mas falhou (servidor down, etc.) → deixa o browser tratar */
+          return new Response('Erro ao carregar página', { status: 503 })
+        })
+    })
+  )
 }
 
 /* ═══════════════════════════════════════════════════════
-   Roteamento de fetch
+   Roteamento
    ═══════════════════════════════════════════════════════ */
 self.addEventListener('fetch', event => {
   const { request } = event
   const url = new URL(request.url)
 
-  /* Só processar mesma origem */
   if (url.origin !== location.origin) return
 
-  /* Mutações (POST/PUT/DELETE) → sempre rede; offline retorna 503 limpo */
+  /* next-auth → sempre rede */
+  if (url.pathname.startsWith('/api/auth/')) return
+
+  /* Mutações → rede; offline retorna 503 limpo */
   if (request.method !== 'GET') {
     event.respondWith(
       fetch(request).catch(() =>
@@ -126,12 +134,7 @@ self.addEventListener('fetch', event => {
     return
   }
 
-  /* next-auth → sempre rede (nunca cachear tokens/cookies de sessão) */
-  if (url.pathname.startsWith('/api/auth/')) return
-
-  /* ── Assets estáticos com hash (_next/static/): CacheFirst ──
-     Idêntico ao que o Workbox faz com precacheAndRoute para assets com revisão.
-     Hash garante que assets diferentes = URLs diferentes → seguro fazer CacheFirst. */
+  /* Assets estáticos com hash → CacheFirst */
   if (url.pathname.startsWith('/_next/static/') ||
       url.pathname.startsWith('/_next/image/')  ||
       /\.(png|jpe?g|svg|ico|webp|woff2?|ttf)$/.test(url.pathname)) {
@@ -139,21 +142,16 @@ self.addEventListener('fetch', event => {
     return
   }
 
-  /* ── API de leitura (/api/*): StaleWhileRevalidate ──
-     Igual à estratégia do pwa-tutorial para Google Fonts.
-     Dados aparecem instantaneamente do cache; rede os atualiza em background.
-     Essencial para o app funcionar offline mostrando dados da última sessão. */
+  /* API de leitura → StaleWhileRevalidate (instantâneo do cache, atualiza em background) */
   if (url.pathname.startsWith('/api/')) {
-    const offlineFallback = new Response(
+    const fallback = new Response(
       JSON.stringify({ error: 'offline', cached: false, registros: [], total: 0 }),
       { status: 200, headers: { 'Content-Type': 'application/json' } }
     )
-    event.respondWith(staleWhileRevalidate(request, API_CACHE, offlineFallback))
+    event.respondWith(staleWhileRevalidate(request, API_CACHE, fallback))
     return
   }
 
-  /* ── Páginas HTML: NetworkFirst com timeout 4s ──
-     Caches a página em cada visita. Offline: serve do cache.
-     Se nunca visitou + offline: exibe /offline. */
-  event.respondWith(networkFirst(request, PAGES_CACHE))
+  /* Páginas → SmartPage (sem tela offline indevida) */
+  event.respondWith(smartPage(request, PAGES_CACHE))
 })
